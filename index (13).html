@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TGS / Lottie Layer Name Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js"></script>
+<style>
+:root{--bg:#eef0f7;--surface:#fff;--ink:#1b1b3a;--muted:#6c6f93;--line:#d9dcec;--accent:#ff5c7a;--accent-ink:#fff;--teal:#0ea896;--hl:#ffe08a;--c1:#c9ccdb;--c2:#e6e8f1;--warn:#d9480f}
+@media(prefers-color-scheme:dark){:root{--bg:#13142a;--surface:#1c1e3b;--ink:#edeefb;--muted:#9ea1c6;--line:#2f3260;--accent:#ff6f8a;--teal:#2dd4bf;--hl:#6b5a14;--c1:#3a3d63;--c2:#2b2d4e;--warn:#ffa94d}}
+*{box-sizing:border-box}
+html{height:100%}
+body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);font:15px/1.5 Inter,system-ui,sans-serif;padding:max(20px,env(safe-area-inset-top)) 20px max(40px,env(safe-area-inset-bottom))}
+h1,h2{font-family:'Bricolage Grotesque',Inter,sans-serif;margin:0;letter-spacing:-.02em}
+h1{font-size:clamp(28px,5vw,44px);font-weight:800;line-height:1.05}
+h2{font-size:18px;font-weight:700}
+.wrap{max-width:1200px;margin:0 auto}
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;padding:12px 0 24px}
+header p{margin:6px 0 0;color:var(--muted);max-width:56ch}
+.grid{display:grid;gap:20px;grid-template-columns:minmax(0,420px) minmax(0,1fr);align-items:start}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px}
+.stack{display:grid;gap:20px}
+.drop{border:2px dashed var(--line);border-radius:12px;padding:22px 14px;text-align:center;color:var(--muted);cursor:pointer;transition:.15s}
+.drop:hover,.drop.over{border-color:var(--accent);color:var(--ink);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.drop b{display:block;color:var(--ink);font-size:16px}
+.stage{aspect-ratio:1;border-radius:12px;margin-top:14px;overflow:hidden;background:repeating-conic-gradient(var(--c1) 0 25%,var(--c2) 0 50%) 0 0/28px 28px;display:grid;place-items:center}
+.stage svg{width:100%;height:100%}
+.stage.empty::after{content:"Preview appears here";color:var(--muted);font-size:14px;background:var(--surface);padding:6px 12px;border-radius:99px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row.mt{margin-top:12px}
+button{font:600 14px Inter,sans-serif;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:9px 14px;border-radius:10px;cursor:pointer;transition:.12s}
+button:hover:not(:disabled){border-color:var(--ink)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button.primary:hover:not(:disabled){filter:brightness(1.08);border-color:var(--accent)}
+button.ghost{border-color:transparent;background:transparent;color:var(--muted);padding:6px 8px}
+button.ghost:hover:not(:disabled){color:var(--accent);border-color:transparent}
+:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+label.f{display:block;font-weight:600;font-size:13px;margin-bottom:5px}
+input[type=text]{width:100%;font:15px 'JetBrains Mono',monospace;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+input[type=text]:focus{outline:2px solid var(--teal);outline-offset:1px;border-color:transparent}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:560px){.two{grid-template-columns:1fr}}
+.opts{display:flex;flex-wrap:wrap;gap:6px 16px;margin:12px 0;font-size:14px}
+.opts label{display:flex;gap:6px;align-items:center;cursor:pointer}
+.opts input{accent-color:var(--accent)}
+.sep{width:100%;height:0;border-top:1px solid var(--line);margin:2px 0}
+.pill{font-size:13px;color:var(--muted)}
+.pill b{color:var(--ink)}
+.stats{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:12px}
+.warn{color:var(--warn)}
+.pairs{display:grid;gap:8px;margin-top:12px}
+.pair{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.pair code{font:13px 'JetBrains Mono',monospace;word-break:break-all}
+.pair .arrow{color:var(--accent);margin:0 6px}
+.pair .acts{display:flex;gap:2px}
+.empty-note{color:var(--muted);font-size:14px;margin:12px 0 0}
+.layers{margin-top:12px;display:grid;gap:6px;max-height:560px;overflow:auto;padding-right:4px}
+.layer{display:grid;grid-template-columns:44px 1fr;gap:10px;align-items:start;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.layer.hit{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 6%,transparent)}
+.badge{font-size:11px;font-weight:600;text-align:center;color:var(--muted);background:var(--bg);border-radius:6px;padding:3px 0;margin-top:6px}
+.layer input{padding:6px 10px;font-size:14px}
+.diff{font:13px 'JetBrains Mono',monospace;margin-top:5px;word-break:break-all;color:var(--muted)}
+.diff mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 1px}
+.diff .new{color:var(--teal);font-weight:500}
+.where{font-size:12px;color:var(--muted);margin-top:3px}
+[hidden]{display:none!important}
+.switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;font-size:14px}
+.switch input{position:absolute;opacity:0;width:1px;height:1px}
+.track{width:40px;height:22px;border-radius:99px;background:var(--line);position:relative;transition:.15s}
+.track::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.3);transition:.15s}
+.switch input:checked+.track{background:var(--teal)}
+.switch input:checked+.track::after{transform:translateX(18px)}
+.switch input:focus-visible+.track{outline:2px solid var(--teal);outline-offset:2px}
+textarea.code{width:100%;height:420px;margin-top:14px;resize:vertical;font:13px/1.55 'JetBrains Mono',monospace;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px;tab-size:2;white-space:pre;overflow:auto}
+textarea.code:focus{outline:2px solid var(--teal);outline-offset:1px;border-color:transparent}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:99px;font-weight:600;opacity:0;pointer-events:none;transition:.2s;z-index:9}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>Layer name editor</h1>
+    <p>Open a .tgs or Lottie .json file, find and replace text in layer names, then download the result in either format.</p>
+  </div>
+  <div class="row">
+    <button id="undo" disabled>Undo</button>
+  </div>
+</header>
+
+<div class="grid">
+  <div class="stack">
+    <section class="card">
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose a file">
+        <b id="fileTitle">Drop a .tgs or .json file</b>
+        <span id="fileSub">or click to browse</span>
+      </div>
+      <input class="sr" type="file" id="file" accept=".tgs,.json,application/json,application/gzip">
+      <div class="stage empty" id="stage"></div>
+      <div class="row mt">
+        <button id="play" disabled>Pause</button>
+        <button class="primary" id="dlTgs" disabled>Download .tgs</button>
+        <button id="dlJson" disabled>Download .json</button>
+      </div>
+      <div class="stats" id="stats"></div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="card">
+      <h2>Find and replace</h2>
+      <div class="two" style="margin-top:14px">
+        <div><label class="f" for="target">Target text</label><input type="text" id="target" placeholder="Text to find" autocomplete="off" spellcheck="false"></div>
+        <div><label class="f" for="repl">Replacement text</label><input type="text" id="repl" placeholder="New text" autocomplete="off" spellcheck="false"></div>
+      </div>
+      <div class="opts">
+        <label><input type="checkbox" id="case"> Match case</label>
+        <label><input type="checkbox" id="whole"> Whole word</label>
+        <label><input type="checkbox" id="useRegex"> Regex</label>
+        <span class="sep"></span>
+        <label><input type="checkbox" id="scLayers" checked> Layer names</label>
+        <label><input type="checkbox" id="scShapes"> Shape and group names</label>
+        <label><input type="checkbox" id="scText"> Text content</label>
+      </div>
+      <div class="row">
+        <button class="primary" id="apply" disabled>Replace all</button>
+        <button id="savePair">Save pair</button>
+        <span class="pill" id="matchInfo"></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between">
+        <h2>Saved pairs</h2>
+        <div class="row">
+          <button class="ghost" id="exportPairs">Export</button>
+          <button class="ghost" id="importPairs">Import</button>
+          <input class="sr" type="file" id="importFile" accept=".json">
+        </div>
+      </div>
+      <div class="pairs" id="pairs"></div>
+    </section>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between">
+        <h2>Layers</h2>
+        <input type="text" id="filter" placeholder="Filter layers" style="max-width:220px" autocomplete="off">
+      </div>
+      <div class="layers" id="layers"></div>
+    </section>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between">
+        <h2>JSON code</h2>
+        <label class="switch"><input type="checkbox" id="codeToggle"><span class="track"></span><span id="codeState">Off</span></label>
+      </div>
+      <p class="empty-note" id="codeOff">Turn this on to edit the raw animation JSON.</p>
+      <div id="codePanel" hidden>
+        <textarea id="code" class="code" spellcheck="false" wrap="off" aria-label="Animation JSON"></textarea>
+        <div class="row mt">
+          <button class="primary" id="codeApply">Apply code</button>
+          <button id="codeFormat">Format</button>
+          <button id="codeCopy">Copy</button>
+          <span class="pill" id="codeStatus"></span>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const TYPES = {0:'Comp',1:'Solid',2:'Image',3:'Null',4:'Shape',5:'Text',6:'Audio',13:'Camera'};
+const PKEY = 'layerNameEditor.pairs', DKEY = 'layerNameEditor.draft';
+let anim = null, base = 'animation', history = [], inst = null, sizeTimer = null;
+
+/* ---------- storage ---------- */
+const store = {
+  get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+let pairs = store.get(PKEY, []);
+
+/* ---------- helpers ---------- */
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2200);
+}
+const fmt = n => n < 1024 ? n + ' B' : (n / 1024).toFixed(1) + ' KB';
+async function gunzip(buf) {
+  const s = new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Response(s).text();
+}
+async function gzip(text) {
+  const s = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
+  return new Response(s).arrayBuffer();
+}
+function download(data, name, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([data], { type }));
+  a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+/* ---------- matching ---------- */
+function buildRe() {
+  const t = $('#target').value;
+  if (!t) return null;
+  let src = $('#useRegex').checked ? t : t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if ($('#whole').checked) src = '\\b(?:' + src + ')\\b';
+  try { return new RegExp(src, 'g' + ($('#case').checked ? '' : 'i')); } catch (e) { return false; }
+}
+function replacer() {
+  const r = $('#repl').value;
+  return $('#useRegex').checked ? r : () => r;
+}
+const has = (re, s) => { re.lastIndex = 0; const ok = re.test(s); re.lastIndex = 0; return ok; };
+
+/* ---------- animation structure ---------- */
+function collect() {
+  const layers = [], shapes = [], texts = [];
+  if (!anim) return { layers, shapes, texts };
+  const walk = arr => (arr || []).forEach(s => { if (typeof s.nm === 'string') shapes.push(s); if (s.it) walk(s.it); });
+  const add = (list, where) => (list || []).forEach(l => {
+    layers.push({ l, where });
+    walk(l.shapes);
+    const k = l.t && l.t.d && l.t.d.k;
+    if (Array.isArray(k)) k.forEach(f => { if (f.s && typeof f.s.t === 'string') texts.push(f.s); });
+  });
+  add(anim.layers, 'Main timeline');
+  (anim.assets || []).forEach(a => add(a.layers, 'Composition ' + (a.nm || a.id)));
+  return { layers, shapes, texts };
+}
+function targets() {
+  const { layers, shapes, texts } = collect(), out = [];
+  if ($('#scLayers').checked) layers.forEach(x => { if (typeof x.l.nm === 'string') out.push([x.l, 'nm']); });
+  if ($('#scShapes').checked) shapes.forEach(s => out.push([s, 'nm']));
+  if ($('#scText').checked) texts.forEach(s => out.push([s, 't']));
+  return out;
+}
+
+/* ---------- history ---------- */
+function snapshot() { history.push(JSON.stringify(anim)); if (history.length > 40) history.shift(); $('#undo').disabled = false; }
+function undo() {
+  if (!history.length) return;
+  anim = JSON.parse(history.pop());
+  $('#undo').disabled = !history.length;
+  refresh(true); toast('Undone');
+}
+
+/* ---------- rendering ---------- */
+function highlight(str, re) {
+  const f = document.createDocumentFragment(); let last = 0, m;
+  re.lastIndex = 0;
+  while ((m = re.exec(str))) {
+    if (m[0] === '') { re.lastIndex++; continue; }
+    f.append(str.slice(last, m.index));
+    const k = document.createElement('mark'); k.textContent = m[0]; f.append(k);
+    last = m.index + m[0].length;
+  }
+  f.append(str.slice(last)); re.lastIndex = 0; return f;
+}
+function renderLayers() {
+  const box = $('#layers'); box.textContent = '';
+  if (!anim) { box.innerHTML = '<p class="empty-note">Load a file to see its layers.</p>'; return; }
+  const re = buildRe(), rp = replacer(), q = $('#filter').value.toLowerCase();
+  const { layers } = collect();
+  const showNm = $('#scLayers').checked;
+  let shown = 0;
+  layers.forEach((x, i) => {
+    const l = x.l, name = l.nm || '';
+    if (q && !name.toLowerCase().includes(q)) return;
+    shown++;
+    const hit = re && showNm && has(re, name);
+    const row = document.createElement('div'); row.className = 'layer' + (hit ? ' hit' : '');
+    const b = document.createElement('div'); b.className = 'badge'; b.textContent = TYPES[l.ty] || 'Layer';
+    const main = document.createElement('div');
+    const inp = document.createElement('input'); inp.type = 'text'; inp.value = name; inp.setAttribute('aria-label', 'Layer name');
+    inp.spellcheck = false;
+    inp.addEventListener('change', () => { snapshot(); l.nm = inp.value; refresh(false); });
+    main.append(inp);
+    if (hit) {
+      const d = document.createElement('div'); d.className = 'diff';
+      d.append(highlight(name, re));
+      const n = document.createElement('span'); n.className = 'new'; n.textContent = '  →  ' + name.replace(re, rp);
+      d.append(n); main.append(d);
+    }
+    const w = document.createElement('div'); w.className = 'where'; w.textContent = x.where; main.append(w);
+    row.append(b, main); box.append(row);
+  });
+  if (!shown) box.innerHTML = '<p class="empty-note">No layers match the filter.</p>';
+}
+function renderMatches() {
+  const re = buildRe(), info = $('#matchInfo');
+  if (re === false) { info.innerHTML = '<span class="warn">Invalid regex</span>'; $('#apply').disabled = true; return; }
+  if (!anim || !re) { info.textContent = ''; $('#apply').disabled = true; return; }
+  const n = targets().filter(([o, k]) => has(re, o[k])).length;
+  info.innerHTML = '<b>' + n + '</b> ' + (n === 1 ? 'match' : 'matches');
+  $('#apply').disabled = n === 0;
+}
+function renderPairs() {
+  const box = $('#pairs'); box.textContent = '';
+  if (!pairs.length) { box.innerHTML = '<p class="empty-note" style="margin:0">Fill both text boxes and choose Save pair to keep them here.</p>'; return; }
+  pairs.forEach((p, i) => {
+    const row = document.createElement('div'); row.className = 'pair';
+    const c = document.createElement('code');
+    const a = document.createElement('span'); a.textContent = p.t || '(empty)';
+    const ar = document.createElement('span'); ar.className = 'arrow'; ar.textContent = '→';
+    const r = document.createElement('span'); r.textContent = p.r || '(empty)';
+    c.append(a, ar, r);
+    const acts = document.createElement('div'); acts.className = 'acts';
+    const mk = (txt, fn, cls, dis) => { const x = document.createElement('button'); x.className = cls || 'ghost'; x.textContent = txt; x.disabled = !!dis; x.onclick = fn; return x; };
+    acts.append(
+      mk('Use', () => { $('#target').value = p.t; $('#repl').value = p.r; onInput(); }),
+      mk('Replace', () => { $('#target').value = p.t; $('#repl').value = p.r; onInput(); applyAll(); }, 'ghost', !anim),
+      mk('Delete', () => { pairs.splice(i, 1); store.set(PKEY, pairs); renderPairs(); })
+    );
+    row.append(c, acts); box.append(row);
+  });
+}
+function loadPreview() {
+  const st = $('#stage');
+  if (inst) { inst.destroy(); inst = null; }
+  st.textContent = '';
+  if (!anim) { st.classList.add('empty'); return; }
+  st.classList.remove('empty');
+  if (typeof lottie === 'undefined') { toast('Preview library failed to load'); return; }
+  try {
+    inst = lottie.loadAnimation({ container: st, renderer: 'svg', loop: true, autoplay: true, animationData: JSON.parse(JSON.stringify(anim)) });
+    $('#play').textContent = 'Pause';
+  } catch (e) { toast('Could not preview this animation'); }
+}
+function renderStats() {
+  const s = $('#stats');
+  if (!anim) { s.textContent = ''; return; }
+  const text = JSON.stringify(anim), { layers } = collect();
+  const dur = anim.fr ? ((anim.op - anim.ip) / anim.fr).toFixed(2) : '?';
+  s.innerHTML = `<span class="pill"><b>${layers.length}</b> layers</span><span class="pill"><b>${anim.w}×${anim.h}</b></span><span class="pill"><b>${Math.round(anim.fr)}</b> fps</span><span class="pill"><b>${dur}s</b></span><span class="pill">JSON <b>${fmt(new Blob([text]).size)}</b></span><span class="pill" id="tgsSize"></span>`;
+  clearTimeout(sizeTimer);
+  sizeTimer = setTimeout(async () => {
+    try {
+      const n = (await gzip(text)).byteLength, el = $('#tgsSize');
+      if (el) el.innerHTML = 'TGS <b class="' + (n > 65536 ? 'warn' : '') + '">' + fmt(n) + '</b>' + (n > 65536 ? ' <span class="warn">(over Telegram’s 64 KB limit)</span>' : '');
+    } catch (e) {}
+  }, 150);
+}
+function refresh(reloadPreview) {
+  renderLayers(); renderMatches(); renderStats();
+  if (reloadPreview) loadPreview();
+  ['#play', '#dlTgs', '#dlJson'].forEach(id => $(id).disabled = !anim);
+  renderPairs();
+  if (!codeDirty) syncCode();
+}
+
+/* ---------- actions ---------- */
+function applyAll() {
+  const re = buildRe();
+  if (!anim || !re) return;
+  const rp = replacer(); let n = 0;
+  const list = targets().filter(([o, k]) => has(re, o[k]));
+  if (!list.length) return toast('No matches found');
+  snapshot();
+  list.forEach(([o, k]) => { o[k] = o[k].replace(re, rp); n++; });
+  refresh(true); toast('Replaced in ' + n + (n === 1 ? ' item' : ' items'));
+}
+function savePair() {
+  const t = $('#target').value, r = $('#repl').value;
+  if (!t) return toast('Enter target text first');
+  if (pairs.some(p => p.t === t && p.r === r)) return toast('Pair already saved');
+  pairs.unshift({ t, r }); store.set(PKEY, pairs); renderPairs(); toast('Pair saved');
+}
+function onInput() {
+  store.set(DKEY, { t: $('#target').value, r: $('#repl').value, o: ['case', 'whole', 'useRegex', 'scLayers', 'scShapes', 'scText'].map(id => $('#' + id).checked) });
+  renderLayers(); renderMatches();
+}
+async function openFile(file) {
+  if (!file) return;
+  try {
+    const buf = await file.arrayBuffer(), u = new Uint8Array(buf);
+    const text = (u[0] === 0x1f && u[1] === 0x8b) ? await gunzip(buf) : new TextDecoder().decode(buf);
+    const data = JSON.parse(text);
+    if (!data || !Array.isArray(data.layers)) throw new Error('not lottie');
+    anim = data; history = []; $('#undo').disabled = true;
+    base = file.name.replace(/\.(tgs|json)$/i, '') || 'animation';
+    $('#fileTitle').textContent = file.name; $('#fileSub').textContent = 'Click or drop to open a different file';
+    refresh(true); toast('Loaded ' + file.name);
+  } catch (e) {
+    toast('Could not read that file. Use a .tgs or Lottie .json file.');
+  }
+}
+
+/* ---------- wiring ---------- */
+const drop = $('#drop');
+drop.onclick = () => $('#file').click();
+drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('#file').click(); } };
+$('#file').onchange = e => { openFile(e.target.files[0]); e.target.value = ''; };
+['dragenter', 'dragover'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); if (ev === 'drop' || e.target === document.documentElement) drop.classList.remove('over'); }));
+document.addEventListener('drop', e => openFile(e.dataTransfer.files[0]));
+
+['target', 'repl', 'case', 'whole', 'useRegex', 'scLayers', 'scShapes', 'scText'].forEach(id => $('#' + id).addEventListener('input', onInput));
+$('#filter').addEventListener('input', renderLayers);
+$('#repl').addEventListener('keydown', e => { if (e.key === 'Enter') applyAll(); });
+$('#apply').onclick = applyAll;
+$('#savePair').onclick = savePair;
+$('#undo').onclick = undo;
+document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) { e.preventDefault(); undo(); } });
+$('#play').onclick = () => {
+  if (!inst) return;
+  if (inst.isPaused) { inst.play(); $('#play').textContent = 'Pause'; } else { inst.pause(); $('#play').textContent = 'Play'; }
+};
+$('#dlJson').onclick = () => download(JSON.stringify(anim), base + '.json', 'application/json');
+$('#dlTgs').onclick = async () => {
+  try { download(await gzip(JSON.stringify(anim)), base + '.tgs', 'application/gzip'); }
+  catch (e) { toast('This browser cannot create .tgs files. Download .json instead.'); }
+};
+$('#exportPairs').onclick = () => pairs.length ? download(JSON.stringify(pairs, null, 2), 'saved-pairs.json', 'application/json') : toast('No saved pairs to export');
+$('#importPairs').onclick = () => $('#importFile').click();
+$('#importFile').onchange = async e => {
+  try {
+    const arr = JSON.parse(await e.target.files[0].text());
+    const ok = arr.filter(p => p && typeof p.t === 'string' && typeof p.r === 'string' && p.t);
+    ok.forEach(p => { if (!pairs.some(q => q.t === p.t && q.r === p.r)) pairs.push({ t: p.t, r: p.r }); });
+    store.set(PKEY, pairs); renderPairs(); toast('Imported ' + ok.length + ' pairs');
+  } catch (err) { toast('That file is not a saved-pairs export'); }
+  e.target.value = '';
+};
+
+/* ---------- JSON code editor ---------- */
+let codeDirty = false, codeTimer = null;
+const codeOn = () => $('#codeToggle').checked;
+function setStatus(msg, cls) { const s = $('#codeStatus'); s.className = 'pill ' + (cls || ''); s.textContent = msg; }
+function codeCheck() {
+  const v = $('#code').value;
+  if (!v.trim()) { setStatus(''); return null; }
+  try {
+    const data = JSON.parse(v);
+    if (!data || !Array.isArray(data.layers)) { setStatus('Valid JSON, but "layers" array is missing', 'warn'); return null; }
+    setStatus(codeDirty ? 'Valid JSON. Not applied yet.' : 'Valid JSON'); return data;
+  } catch (e) { setStatus(e.message, 'warn'); return null; }
+}
+function syncCode() {
+  if (!codeOn()) return;
+  $('#code').value = anim ? JSON.stringify(anim, null, 2) : '';
+  codeDirty = false; codeCheck();
+}
+function setCodeMode(on) {
+  $('#codePanel').hidden = !on; $('#codeOff').hidden = on;
+  $('#codeState').textContent = on ? 'On' : 'Off';
+  store.set('layerNameEditor.code', on);
+  if (on) { codeDirty = false; syncCode(); }
+}
+$('#codeToggle').onchange = e => setCodeMode(e.target.checked);
+$('#code').addEventListener('input', () => {
+  codeDirty = true; clearTimeout(codeTimer); codeTimer = setTimeout(codeCheck, 250);
+});
+$('#code').addEventListener('keydown', e => {
+  if (e.key === 'Tab') { e.preventDefault(); e.target.setRangeText('  ', e.target.selectionStart, e.target.selectionEnd, 'end'); codeDirty = true; }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); applyCode(); }
+});
+function applyCode() {
+  const data = codeCheck();
+  if (!data) return toast('Fix the JSON errors first');
+  if (anim) snapshot();
+  anim = data; codeDirty = false;
+  if (!anim) return;
+  refresh(true); toast('Code applied');
+}
+$('#codeApply').onclick = applyCode;
+$('#codeFormat').onclick = () => {
+  try { $('#code').value = JSON.stringify(JSON.parse($('#code').value), null, 2); codeCheck(); toast('Formatted'); }
+  catch (e) { toast('Fix the JSON errors first'); }
+};
+$('#codeCopy').onclick = async () => {
+  try { await navigator.clipboard.writeText($('#code').value); toast('Copied'); }
+  catch (e) { $('#code').select(); toast('Press Ctrl+C to copy'); }
+};
+if (store.get('layerNameEditor.code', false)) { $('#codeToggle').checked = true; setCodeMode(true); }
+
+/* restore last inputs */
+const d = store.get(DKEY, null);
+if (d) {
+  $('#target').value = d.t || ''; $('#repl').value = d.r || '';
+  (d.o || []).forEach((v, i) => { $('#' + ['case', 'whole', 'useRegex', 'scLayers', 'scShapes', 'scText'][i]).checked = v; });
+}
+refresh(true);
+</script>
+</body>
+</html>
