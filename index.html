@@ -68,6 +68,15 @@ input[type=text]:focus{outline:2px solid var(--teal);outline-offset:1px;border-c
 .diff mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 1px}
 .diff .new{color:var(--teal);font-weight:500}
 .where{font-size:12px;color:var(--muted);margin-top:3px}
+.opt{margin-top:20px;border:2px solid transparent;background:linear-gradient(var(--surface),var(--surface)) padding-box,linear-gradient(120deg,var(--accent),#8b5cf6,var(--teal)) border-box}
+.tape{font:800 11px Inter,sans-serif;letter-spacing:.08em;color:#fff;background:linear-gradient(120deg,var(--accent),#8b5cf6);padding:3px 10px;border-radius:6px;transform:rotate(-3deg);display:inline-block}
+select{font:14px Inter,sans-serif;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 12px;min-width:240px;max-width:100%}
+.cmp{display:grid;grid-template-columns:repeat(2,minmax(0,260px));gap:14px;margin-top:14px}
+@media(max-width:560px){.cmp{grid-template-columns:1fr 1fr}}
+.cmp figcaption{font-size:13px;font-weight:600;color:var(--muted)}
+.cmp figure{margin:0}
+.cmp .stage{margin-top:6px}
+.stage img{width:100%;height:100%;object-fit:contain}
 [hidden]{display:none!important}
 .switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;font-size:14px}
 .switch input{position:absolute;opacity:0;width:1px;height:1px}
@@ -175,6 +184,46 @@ textarea.code:focus{outline:2px solid var(--teal);outline-offset:1px;border-colo
     </section>
   </div>
 </div>
+
+<section class="card opt">
+  <div class="row" style="justify-content:space-between">
+    <div class="row"><h2>Size optimizer</h2><span class="tape">NEW</span></div>
+    <span class="pill">Works with .tgs, .json and .svg</span>
+  </div>
+  <p class="empty-note">Shrinks the file while keeping the design the same. Compare the original and optimized previews before you download.</p>
+  <div class="row mt">
+    <button id="optPick">Choose file</button>
+    <input class="sr" type="file" id="optFile" accept=".tgs,.json,.svg,image/svg+xml">
+    <button id="optUse" disabled>Use loaded animation</button>
+    <span class="pill" id="optName">No file selected</span>
+  </div>
+  <div style="margin-top:14px">
+    <label class="f" for="optPrec">Number precision</label>
+    <select id="optPrec">
+      <option value="3">Safe (3 decimals)</option>
+      <option value="2" selected>Balanced (2 decimals)</option>
+      <option value="1">Aggressive (1 decimal)</option>
+    </select>
+  </div>
+  <div class="opts">
+    <label><input type="checkbox" id="optClean" checked> Remove unused data</label>
+    <label><input type="checkbox" id="optNames"> Strip layer and shape names (Lottie)</label>
+    <label><input type="checkbox" id="optIds" checked> Shorten IDs (SVG)</label>
+  </div>
+  <div class="row">
+    <button class="primary" id="optRun" disabled>Optimize</button>
+    <button id="optDl" disabled>Download</button>
+    <button id="optDlAlt" disabled hidden>Download</button>
+    <button id="optSend" disabled hidden>Send to editor</button>
+  </div>
+  <div id="optResult" hidden>
+    <div class="stats" id="optStats"></div>
+    <div class="cmp">
+      <figure><figcaption>Original</figcaption><div class="stage" id="optA"></div></figure>
+      <figure><figcaption>Optimized</figcaption><div class="stage" id="optB"></div></figure>
+    </div>
+  </div>
+</section>
 </div>
 <div class="toast" id="toast" role="status"></div>
 
@@ -182,7 +231,7 @@ textarea.code:focus{outline:2px solid var(--teal);outline-offset:1px;border-colo
 const $ = s => document.querySelector(s);
 const TYPES = {0:'Comp',1:'Solid',2:'Image',3:'Null',4:'Shape',5:'Text',6:'Audio',13:'Camera'};
 const PKEY = 'layerNameEditor.pairs', DKEY = 'layerNameEditor.draft';
-let anim = null, base = 'animation', history = [], inst = null, sizeTimer = null;
+let srcTgs = false, anim = null, base = 'animation', history = [], inst = null, sizeTimer = null;
 
 /* ---------- storage ---------- */
 const store = {
@@ -360,6 +409,7 @@ function refresh(reloadPreview) {
   ['#play', '#dlTgs', '#dlJson'].forEach(id => $(id).disabled = !anim);
   renderPairs();
   if (!codeDirty) syncCode();
+  $('#optUse').disabled = !anim;
 }
 
 /* ---------- actions ---------- */
@@ -390,7 +440,7 @@ async function openFile(file) {
     const text = (u[0] === 0x1f && u[1] === 0x8b) ? await gunzip(buf) : new TextDecoder().decode(buf);
     const data = JSON.parse(text);
     if (!data || !Array.isArray(data.layers)) throw new Error('not lottie');
-    anim = data; history = []; $('#undo').disabled = true;
+    anim = data; history = []; $('#undo').disabled = true; srcTgs = u[0] === 0x1f && u[1] === 0x8b;
     base = file.name.replace(/\.(tgs|json)$/i, '') || 'animation';
     $('#fileTitle').textContent = file.name; $('#fileSub').textContent = 'Click or drop to open a different file';
     refresh(true); toast('Loaded ' + file.name);
@@ -434,6 +484,167 @@ $('#importFile').onchange = async e => {
     store.set(PKEY, pairs); renderPairs(); toast('Imported ' + ok.length + ' pairs');
   } catch (err) { toast('That file is not a saved-pairs export'); }
   e.target.value = '';
+};
+
+/* ---------- size optimizer ---------- */
+const opt = { kind: null, data: null, name: '', out: null, text: '', tgs: false, insts: [], urls: [] };
+const NOROUND = new Set(['fr', 'ip', 'op', 'st', 'sr', 'v']);
+const HIPREC = new Set(['c', 'g', 'i', 'o']);
+
+function optLottie(src, dec, clean, names) {
+  const d = JSON.parse(JSON.stringify(src));
+  const expr = JSON.stringify(d).includes('"x":"');
+  const drop = new Set();
+  if (clean) { drop.add('mn'); drop.add('cl'); if (!expr) drop.add('ix'); }
+  if (names && !expr) drop.add('nm');
+  if (clean) {
+    const byId = {}, used = new Set();
+    (d.assets || []).forEach(a => { byId[a.id] = a; });
+    const scan = ls => (ls || []).forEach(l => {
+      if (l.refId && !used.has(l.refId)) { used.add(l.refId); if (byId[l.refId]) scan(byId[l.refId].layers); }
+    });
+    scan(d.layers);
+    if (d.assets) d.assets = d.assets.filter(a => used.has(a.id));
+  }
+  const conv = (v, dc) => {
+    if (typeof v === 'number') { if (Number.isInteger(v)) return v; const p = 10 ** dc; return Math.round(v * p) / p; }
+    if (Array.isArray(v)) return v.map(x => conv(x, dc));
+    if (v && typeof v === 'object') {
+      const out = {};
+      for (const k in v) {
+        if (drop.has(k)) continue;
+        if (clean && k === 'hd' && v[k] === false) continue;
+        if (clean && k === 'meta') continue;
+        if (clean && k === 'markers' && Array.isArray(v[k]) && !v[k].length) continue;
+        if (NOROUND.has(k)) { out[k] = v[k]; continue; }
+        let val = v[k];
+        if (clean && (k === 'shapes' || k === 'it') && Array.isArray(val)) val = val.filter(x => !(x && x.hd === true));
+        out[k] = conv(val, HIPREC.has(k) ? Math.max(dc, 3) : (k === 't' ? Math.max(dc, 2) : dc));
+      }
+      return out;
+    }
+    return v;
+  };
+  if (names && expr) toast('Names kept: this animation uses expressions that may refer to them');
+  return conv(d, dec);
+}
+
+function optSvg(text, dec, clean, ids) {
+  const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+  const svg = doc.documentElement;
+  if (doc.querySelector('parsererror') || svg.nodeName.toLowerCase() !== 'svg') throw new Error('That does not look like a valid SVG');
+  const vb = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+  const d0 = dec + (vb.length === 4 && vb[2] <= 100 ? 1 : 0);
+  const rnd = (s, dc) => s.replace(/-?\d*\.\d+/g, m => { const p = 10 ** dc; return String(Math.round(Number(m) * p) / p); });
+  const LOW = new Set(['d', 'points', 'x', 'y', 'cx', 'cy', 'r', 'rx', 'ry', 'x1', 'y1', 'x2', 'y2', 'width', 'height', 'stroke-width', 'stroke-dasharray', 'stroke-dashoffset', 'font-size']);
+  const HIGH = new Set(['transform', 'gradientTransform', 'patternTransform', 'opacity', 'fill-opacity', 'stroke-opacity', 'stop-opacity', 'offset']);
+  const bad = n => /^(sodipodi:|inkscape:|rdf:|cc:|dc:)/.test(n) || n === 'metadata';
+  if (clean) {
+    const w = doc.createTreeWalker(svg, NodeFilter.SHOW_COMMENT), cs = [];
+    while (w.nextNode()) cs.push(w.currentNode);
+    cs.forEach(c => c.remove());
+    [...svg.querySelectorAll('*')].forEach(el => { if (bad(el.nodeName.toLowerCase())) el.remove(); });
+    [svg, ...svg.querySelectorAll('*')].forEach(el => {
+      [...el.attributes].forEach(a => {
+        if (/^(inkscape:|sodipodi:|data-|xmlns:(inkscape|sodipodi|dc|cc|rdf))/.test(a.name) || ['xml:space', 'version', 'enable-background'].includes(a.name) || (a.name === 'style' && !a.value.trim())) el.removeAttributeNode(a);
+      });
+    });
+    for (let i = 0; i < 3; i++) svg.querySelectorAll('g,defs').forEach(el => { if (!el.children.length && !el.textContent.trim() && (el.nodeName === 'defs' || !el.id)) el.remove(); });
+  }
+  [svg, ...svg.querySelectorAll('*')].forEach(el => {
+    [...el.attributes].forEach(a => {
+      if (el === svg && (a.name === 'width' || a.name === 'height')) return;
+      if (LOW.has(a.name)) a.value = rnd(a.value, d0);
+      else if (HIGH.has(a.name)) a.value = rnd(a.value, Math.max(d0, 3));
+    });
+  });
+  if (ids && !svg.querySelector('style,script,animate,set,animateMotion,animateTransform')) {
+    const map = {}; let n = 0;
+    const short = i => { let s = ''; do { s = String.fromCharCode(97 + i % 26) + s; i = Math.floor(i / 26) - 1; } while (i >= 0); return s; };
+    svg.querySelectorAll('[id]').forEach(el => { const o = el.getAttribute('id'); if (!(o in map)) map[o] = short(n++); });
+    [svg, ...svg.querySelectorAll('*')].forEach(el => [...el.attributes].forEach(a => {
+      if (a.name === 'id') a.value = map[a.value] || a.value;
+      else if ((a.name === 'href' || a.name === 'xlink:href') && a.value[0] === '#') a.value = '#' + (map[a.value.slice(1)] || a.value.slice(1));
+      else if (a.value.includes('url(#') || /url\(['"]#/.test(a.value)) a.value = a.value.replace(/url\((['"]?)#([^)'"\s]+)\1\)/g, (m, q, id) => map[id] ? 'url(#' + map[id] + ')' : m);
+    }));
+  }
+  let out = new XMLSerializer().serializeToString(svg);
+  if (clean && !svg.querySelector('text')) out = out.replace(/>\s+</g, '><');
+  return out.trim();
+}
+
+async function optSet(kind, data, name, tgs, label) {
+  Object.assign(opt, { kind, data, name, tgs, out: null, text: '' });
+  $('#optName').textContent = label;
+  $('#optRun').disabled = false; $('#optResult').hidden = true;
+  ['#optDl', '#optDlAlt', '#optSend'].forEach(id => { $(id).disabled = true; });
+  $('#optDlAlt').hidden = kind !== 'lottie'; $('#optSend').hidden = kind !== 'lottie';
+  $('#optDl').textContent = kind === 'svg' ? 'Download .svg' : (tgs ? 'Download .tgs' : 'Download .json');
+  $('#optDlAlt').textContent = tgs ? 'Download .json' : 'Download .tgs';
+}
+async function optLoad(file) {
+  if (!file) return;
+  try {
+    const buf = await file.arrayBuffer(), u = new Uint8Array(buf);
+    const name = file.name.replace(/\.(tgs|json|svg)$/i, '') || 'animation';
+    if (/\.svg$/i.test(file.name) || file.type === 'image/svg+xml') {
+      await optSet('svg', new TextDecoder().decode(buf), name, false, file.name + ' (' + fmt(buf.byteLength) + ')');
+    } else {
+      const gz = u[0] === 0x1f && u[1] === 0x8b;
+      const j = JSON.parse(gz ? await gunzip(buf) : new TextDecoder().decode(buf));
+      if (!j || !Array.isArray(j.layers)) throw new Error('not lottie');
+      await optSet('lottie', j, name, gz, file.name + ' (' + fmt(buf.byteLength) + ')');
+    }
+  } catch (e) { toast('Use a .tgs, Lottie .json or .svg file'); }
+}
+async function optRun() {
+  if (!opt.kind) return;
+  const dec = +$('#optPrec').value, clean = $('#optClean').checked, names = $('#optNames').checked, ids = $('#optIds').checked;
+  const lot = opt.kind === 'lottie';
+  let orig, out;
+  try {
+    if (lot) { orig = JSON.stringify(opt.data); opt.out = optLottie(opt.data, dec, clean, names); out = JSON.stringify(opt.out); }
+    else { orig = opt.data; out = optSvg(opt.data, dec, clean, ids); }
+  } catch (e) { return toast(e.message || 'Optimization failed'); }
+  opt.text = out;
+  const sz = s => new Blob([s]).size, pc = (a, b) => a ? Math.round((1 - b / a) * 100) : 0;
+  const pill = (l, a, b, w) => `<span class="pill">${l} <b>${fmt(a)}</b> → <b class="${w ? 'warn' : ''}">${fmt(b)}</b> (${pc(a, b) > 0 ? '−' + pc(a, b) + '%' : 'no change'})</span>`;
+  let html;
+  if (lot) { const g1 = (await gzip(orig)).byteLength, g2 = (await gzip(out)).byteLength; html = pill('JSON', sz(orig), sz(out)) + pill('TGS', g1, g2, g2 > 65536); }
+  else html = pill('SVG', sz(orig), sz(out));
+  $('#optStats').innerHTML = html;
+  opt.insts.forEach(i => i.destroy()); opt.insts = [];
+  opt.urls.forEach(u => URL.revokeObjectURL(u)); opt.urls = [];
+  const A = $('#optA'), B = $('#optB'); A.textContent = ''; B.textContent = '';
+  if (lot && typeof lottie !== 'undefined') {
+    [[A, opt.data], [B, opt.out]].forEach(([el, data]) => opt.insts.push(lottie.loadAnimation({ container: el, renderer: 'svg', loop: true, autoplay: true, animationData: JSON.parse(JSON.stringify(data)) })));
+  } else if (!lot) {
+    [[A, orig], [B, out]].forEach(([el, t]) => { const u = URL.createObjectURL(new Blob([t], { type: 'image/svg+xml' })); opt.urls.push(u); const im = new Image(); im.alt = ''; im.src = u; el.append(im); });
+  }
+  $('#optResult').hidden = false;
+  ['#optDl', '#optDlAlt', '#optSend'].forEach(id => { $(id).disabled = false; });
+  toast(pc(sz(orig), sz(out)) > 0 ? 'Optimized: ' + pc(sz(orig), sz(out)) + '% smaller' : 'Already compact');
+}
+$('#optPick').onclick = () => $('#optFile').click();
+$('#optFile').onchange = e => { optLoad(e.target.files[0]); e.target.value = ''; };
+$('#optUse').onclick = () => { if (anim) optSet('lottie', JSON.parse(JSON.stringify(anim)), base, srcTgs, base + ' (loaded animation)'); };
+$('#optRun').onclick = optRun;
+const saveLottie = async (asTgs) => {
+  const name = opt.name + '-optimized';
+  if (asTgs) { try { download(await gzip(opt.text), name + '.tgs', 'application/gzip'); } catch (e) { toast('This browser cannot create .tgs files'); } }
+  else download(opt.text, name + '.json', 'application/json');
+};
+$('#optDl').onclick = () => {
+  if (!opt.text) return;
+  if (opt.kind === 'svg') download(opt.text, opt.name + '-optimized.svg', 'image/svg+xml');
+  else saveLottie(opt.tgs);
+};
+$('#optDlAlt').onclick = () => { if (opt.text) saveLottie(!opt.tgs); };
+$('#optSend').onclick = () => {
+  if (opt.kind !== 'lottie' || !opt.out) return;
+  if (anim) snapshot();
+  anim = JSON.parse(JSON.stringify(opt.out)); base = opt.name; codeDirty = false;
+  refresh(true); toast('Sent to editor'); window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
 /* ---------- JSON code editor ---------- */
