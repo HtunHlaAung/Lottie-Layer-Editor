@@ -103,6 +103,21 @@ textarea.code:focus{outline:2px solid var(--teal);outline-offset:1px;border-colo
 .toast.show{opacity:1;transform:translate(-50%,0)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+.tabs{display:flex;gap:4px;margin:0 0 20px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tab{border:0;border-bottom:3px solid transparent;border-radius:8px 8px 0 0;background:transparent;color:var(--muted);padding:10px 16px;font:700 15px Inter,sans-serif;white-space:nowrap;margin-bottom:-1px}
+.tab:hover:not(:disabled){color:var(--ink);border-color:transparent;border-bottom-color:var(--line)}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.newbadge{font:800 10px Inter,sans-serif;letter-spacing:.08em;color:#fff;background:linear-gradient(120deg,var(--accent),#8b5cf6);padding:2px 7px;border-radius:5px;margin-left:6px;vertical-align:2px}
+.fx-row{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px}
+.fx-row:last-child{border-bottom:0}
+.fx-row span:last-child{text-align:right;font-weight:600}
+.fx-ok{color:var(--teal)}.fx-warn{color:var(--warn)}.fx-bad{color:var(--accent)}
+.fx-verdict{border-radius:12px;padding:12px 14px;margin:0 0 14px;font-size:14px;border:1px solid var(--line)}
+.fx-verdict.good{border-color:var(--teal);background:color-mix(in srgb,var(--teal) 10%,transparent)}
+.fx-verdict.bad{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.fx-list{margin:0;padding-left:20px;font-size:14px}
+.fx-list li{margin:3px 0}
 </style>
 </head>
 <body>
@@ -117,6 +132,12 @@ textarea.code:focus{outline:2px solid var(--teal);outline-offset:1px;border-colo
   </div>
 </header>
 
+<div class="tabs" role="tablist" aria-label="Tools">
+  <button class="tab" role="tab" id="tabBtnEditor" aria-selected="true" aria-controls="tab-editor" data-tab="editor">Editor</button>
+  <button class="tab" role="tab" id="tabBtnFixer" aria-selected="false" aria-controls="tab-fixer" data-tab="fixer">Telegram fixer<span class="newbadge">NEW</span></button>
+</div>
+
+<div id="tab-editor" role="tabpanel" aria-labelledby="tabBtnEditor">
 <div class="grid">
   <div class="stack">
     <section class="card">
@@ -284,6 +305,40 @@ textarea.code:focus{outline:2px solid var(--teal);outline-offset:1px;border-colo
     </div>
   </div>
 </section>
+</div><!-- /tab-editor -->
+
+<div id="tab-fixer" role="tabpanel" aria-labelledby="tabBtnFixer" hidden>
+<div class="grid">
+  <div class="stack">
+    <section class="card">
+      <h2>Telegram sticker fixer</h2>
+      <p class="empty-note">Checks a .tgs or Lottie .json against Telegram's sticker rules and applies the safe fixes. Everything runs in your browser.</p>
+      <div class="drop" id="fxDrop" tabindex="0" role="button" aria-label="Choose a file" style="margin-top:14px">
+        <b id="fxTitle">Drop a .tgs or .json file</b>
+        <span id="fxSub">or click to browse</span>
+      </div>
+      <input class="sr" type="file" id="fxFile" accept=".tgs,.json,application/json,application/gzip">
+      <div class="row mt"><button id="fxUse" disabled>Use animation from Editor</button></div>
+      <div class="stage empty" id="fxStage"></div>
+      <div class="row mt">
+        <button class="primary" id="fxDl" disabled>Download fixed .tgs</button>
+        <button id="fxSend" disabled>Send to Editor</button>
+      </div>
+      <p class="empty-note">The preview uses a web renderer, which is more forgiving than Telegram's. The real test is sending the fixed file as a sticker.</p>
+    </section>
+  </div>
+  <div class="stack">
+    <section class="card">
+      <h2>Report</h2>
+      <div id="fxReport" style="margin-top:12px"><p class="empty-note" style="margin:0">Load a file to see the report.</p></div>
+    </section>
+    <section class="card">
+      <h2>Fixes applied</h2>
+      <div id="fxFixes" style="margin-top:12px"><p class="empty-note" style="margin:0">Nothing yet.</p></div>
+    </section>
+  </div>
+</div>
+</div><!-- /tab-fixer -->
 </div>
 <div class="toast" id="toast" role="status"></div>
 
@@ -517,7 +572,7 @@ drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefau
 $('#file').onchange = e => { openFile(e.target.files[0]); e.target.value = ''; };
 ['dragenter', 'dragover'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
 ['dragleave', 'drop'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); if (ev === 'drop' || e.target === document.documentElement) drop.classList.remove('over'); }));
-document.addEventListener('drop', e => openFile(e.dataTransfer.files[0]));
+document.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (!f) return; if ($('#tab-fixer').hidden) openFile(f); else fxLoad(f); });
 
 ['target', 'repl', 'case', 'whole', 'useRegex', 'scLayers', 'scShapes', 'scText'].forEach(id => $('#' + id).addEventListener('input', onInput));
 $('#filter').addEventListener('input', renderLayers);
@@ -1029,6 +1084,140 @@ if (d) {
   (d.o || []).forEach((v, i) => { $('#' + ['case', 'whole', 'useRegex', 'scLayers', 'scShapes', 'scText'][i]).checked = v; });
 }
 refresh(true);
+
+/* ---------- tabs ---------- */
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+  $('#tab-editor').hidden = name !== 'editor';
+  $('#tab-fixer').hidden = name !== 'fixer';
+  $('#undo').hidden = name !== 'editor';
+  if (name === 'fixer') $('#fxUse').disabled = !anim;
+}
+document.querySelectorAll('.tab').forEach(b => {
+  b.onclick = () => showTab(b.dataset.tab);
+  b.onkeydown = e => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const tabs = [...document.querySelectorAll('.tab')], i = tabs.indexOf(b);
+    const n = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+    n.focus(); showTab(n.dataset.tab);
+  };
+});
+
+/* ---------- Telegram fixer ---------- */
+const FX = { name: 'animation', out: null, bytes: null, inst: null };
+const fxEsc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fxRow = (a, b, c) => '<div class="fx-row"><span>' + a + '</span><span class="' + (c || '') + '">' + b + '</span></div>';
+function fxRound(o) {
+  if (typeof o === 'number') return Number.isInteger(o) ? o : Math.round(o * 1000) / 1000;
+  if (Array.isArray(o)) { for (let i = 0; i < o.length; i++) o[i] = fxRound(o[i]); return o; }
+  if (o && typeof o === 'object') { for (const k in o) o[k] = fxRound(o[k]); }
+  return o;
+}
+function fxLayers(j) {
+  const r = (j.layers || []).map(l => ['Main timeline', l]);
+  (j.assets || []).forEach(a => (a.layers || []).forEach(l => r.push(['Composition ' + (a.nm || a.id), l])));
+  return r;
+}
+function fxScan(j) {
+  const L = fxLayers(j), str = JSON.stringify(j), dur = (j.op - j.ip) / j.fr;
+  const checks = [], hard = [];
+  const add = (label, val, cls) => checks.push(fxRow(label, val, cls));
+  add('Canvas', j.w + '×' + j.h, j.w === 512 && j.h === 512 ? 'fx-ok' : 'fx-bad');
+  add('Frame rate', j.fr + ' fps', j.fr === 30 || j.fr === 60 ? 'fx-ok' : 'fx-bad');
+  add('Duration', dur.toFixed(2) + ' s', dur <= 3.001 ? 'fx-ok' : 'fx-bad');
+  add('Starts at frame', j.ip, j.ip === 0 ? 'fx-ok' : 'fx-warn');
+  const mattes = L.filter(([, l]) => l.tt || l.td);
+  const masks = L.filter(([, l]) => l.hasMask || (l.masksProperties && l.masksProperties.length));
+  const imgs = (j.assets || []).filter(a => a.p || a.u);
+  const solids = L.filter(([, l]) => l.ty === 1), texts = L.filter(([, l]) => l.ty === 5);
+  const fx = L.filter(([, l]) => l.ef && l.ef.length), d3 = L.filter(([, l]) => l.ddd === 1), remap = L.filter(([, l]) => l.tm);
+  const cnt = re => (str.match(re) || []).length;
+  const expr = cnt(/"x":"/g), mm = cnt(/"ty":"mm"/g), rp = cnt(/"ty":"rp"/g), star = cnt(/"ty":"sr"/g);
+  const rows = [
+    ['Track mattes (td/tt layers)', mattes.length, 'fx-bad', 'matte-related layers'], ['Masks', masks.length, 'fx-warn'],
+    ['Embedded images', imgs.length, 'fx-bad', 'images'], ['Solid layers', solids.length, 'fx-bad', 'solids'],
+    ['Text layers', texts.length, 'fx-bad', 'text layers'], ['Layer effects', fx.length, 'fx-bad', 'effects'],
+    ['3D layers', d3.length, 'fx-bad', '3D layers'], ['Time remapping', remap.length, 'fx-bad', 'time remapping'],
+    ['Expressions', expr, 'fx-bad', 'expressions'], ['Merge paths', mm, 'fx-bad', 'merge paths'],
+    ['Repeaters', rp, 'fx-warn'], ['Star and polygon shapes', star, 'fx-warn']
+  ];
+  rows.forEach(([label, n, cls, hardName]) => {
+    add(label, n || 'none', n ? cls : 'fx-ok');
+    if (n && hardName) hard.push(n + ' ' + hardName);
+  });
+  return { checks, hard, mattes };
+}
+function fxPatch(src, name) {
+  const j = JSON.parse(JSON.stringify(src)), fixes = [], notes = [];
+  if (j.tgs !== 1) { j.tgs = 1; fixes.push('Added the <code>"tgs":1</code> flag'); }
+  const before = JSON.stringify(j).length;
+  fxRound(j);
+  const after = JSON.stringify(j).length;
+  if (after < before) fixes.push('Rounded numbers to 3 decimals (JSON ' + fmt(before) + ' → ' + fmt(after) + ')');
+  let c = 0;
+  j.layers.forEach(l => { if (l.op > j.op) { l.op = j.op; c++; } });
+  if (c) fixes.push('Clamped ' + c + ' layer end frames to frame ' + j.op);
+  j.layers.filter(l => l.ty === 3 && /lottielab/i.test(l.nm || '')).forEach(l => {
+    if (j.layers.some(o => o.parent === l.ind)) notes.push('The leftover “' + fxEsc(l.nm) + '” layer is a parent of other layers, so it was kept.');
+    else { j.layers = j.layers.filter(o => o !== l); fixes.push('Removed the leftover “' + fxEsc(l.nm) + '” layer'); }
+  });
+  if (!j.nm) j.nm = name;
+  return { j, fixes, notes };
+}
+async function fxProcess(src, name, origBytes) {
+  FX.name = name;
+  const scan = fxScan(src), res = fxPatch(src, name);
+  FX.out = res.j;
+  FX.bytes = new Uint8Array(await gzip(JSON.stringify(res.j)));
+  const before = origBytes || (await gzip(JSON.stringify(src))).byteLength;
+  const okSize = FX.bytes.length <= 65536;
+  const checks = scan.checks.concat(fxRow('Compressed size', fmt(before) + ' → ' + fmt(FX.bytes.length) + ' (limit 64 KB)', okSize ? 'fx-ok' : 'fx-bad')).join('');
+  let verdict;
+  if (scan.hard.length) {
+    verdict = '<div class="fx-verdict bad"><b>Needs a fix in your design tool.</b> This page cannot safely remove: ' + scan.hard.join(', ') + '. Telegram’s renderer may refuse or blank these. Bake them into plain shapes and export again.' +
+      (scan.mattes.length ? '<br><br>Matte layers: ' + fxEsc(scan.mattes.slice(0, 12).map(([, l]) => l.nm || ('#' + l.ind)).join(', ')) + (scan.mattes.length > 12 ? ' …' : '') : '') + '</div>';
+  } else {
+    verdict = '<div class="fx-verdict good"><b>No unsupported features found.</b> The fixed file should be safe to try in Telegram.</div>';
+  }
+  if (!okSize) verdict += '<div class="fx-verdict bad">The file is over 64 KB. Use the Size optimizer in the Editor tab (Send to Editor first, or choose the file there).</div>';
+  $('#fxReport').innerHTML = verdict + checks;
+  const li = res.fixes.map(f => '<li>' + f + '</li>').join('') + res.notes.map(n => '<li class="fx-warn">' + n + '</li>').join('');
+  $('#fxFixes').innerHTML = li ? '<ul class="fx-list">' + li + '</ul>' : '<p class="empty-note" style="margin:0">The file was already clean. No changes were needed.</p>';
+  const st = $('#fxStage');
+  if (FX.inst) { FX.inst.destroy(); FX.inst = null; }
+  st.textContent = ''; st.classList.remove('empty');
+  try {
+    FX.inst = lottie.loadAnimation({ container: st, renderer: 'svg', loop: true, autoplay: true, animationData: JSON.parse(JSON.stringify(res.j)) });
+  } catch (e) { st.classList.add('empty'); toast('Could not preview this animation'); }
+  $('#fxDl').disabled = false; $('#fxSend').disabled = false;
+}
+async function fxLoad(file) {
+  if (!file) return;
+  try {
+    const buf = await file.arrayBuffer(), u = new Uint8Array(buf), gz = u[0] === 0x1f && u[1] === 0x8b;
+    const j = JSON.parse(gz ? await gunzip(buf) : new TextDecoder().decode(buf));
+    if (!j || !Array.isArray(j.layers)) throw new Error('not lottie');
+    $('#fxTitle').textContent = file.name; $('#fxSub').textContent = 'Click or drop to open a different file';
+    await fxProcess(j, file.name.replace(/\.(tgs|json)$/i, '') || 'animation', gz ? buf.byteLength : 0);
+    toast('Checked ' + file.name);
+  } catch (e) { toast('Could not read that file. Use a .tgs or Lottie .json file.'); }
+}
+/* fx wiring */
+const fxDrop = $('#fxDrop');
+fxDrop.onclick = () => $('#fxFile').click();
+fxDrop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('#fxFile').click(); } };
+$('#fxFile').onchange = e => { fxLoad(e.target.files[0]); e.target.value = ''; };
+['dragenter', 'dragover'].forEach(ev => fxDrop.addEventListener(ev, e => { e.preventDefault(); fxDrop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => fxDrop.addEventListener(ev, e => { e.preventDefault(); fxDrop.classList.remove('over'); }));
+fxDrop.addEventListener('drop', e => { e.stopPropagation(); fxLoad(e.dataTransfer.files[0]); });
+$('#fxUse').onclick = () => { if (anim) { $('#fxTitle').textContent = base + ' (from Editor)'; fxProcess(JSON.parse(JSON.stringify(anim)), base, 0); } };
+$('#fxDl').onclick = () => { if (FX.bytes) download(FX.bytes, FX.name + '-fixed.tgs', 'application/gzip'); };
+$('#fxSend').onclick = () => {
+  if (!FX.out) return;
+  if (anim) snapshot();
+  anim = JSON.parse(JSON.stringify(FX.out)); base = FX.name; srcTgs = true; codeDirty = false;
+  refresh(true); showTab('editor'); toast('Sent to Editor'); window.scrollTo({ top: 0, behavior: 'smooth' });
+};
 </script>
 </body>
 </html>
